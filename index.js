@@ -1,35 +1,50 @@
-import express from 'express';
-import dotenv from 'dotenv';
-import cors from 'cors';
-import { matchUserAndRooms } from './utils/matcher.js';
-import { addMatchToFirestore } from './utils/firestore.js';
+import express from "express";
+import cors from "cors";
+import { db } from "./utils/firestore.js";
+import { matchUserAndRooms } from "./matcher.js";
 
-dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.post('/match', async (req, res) => {
-    try {
-        const { allUsers, currentUser, availableRooms } = req.body;
-        const result = await matchUserAndRooms(allUsers, currentUser, availableRooms);
-        res.json(result);
-    } catch (error) {
-        console.error('Match Error:', error);
-        res.status(500).json({ error: 'AI Match failed' });
-    }
+app.post("/match", async (req, res) => {
+  try {
+    const { currentUser } = req.body;
+
+    const allUsersSnap = await db.collection("users").get();
+    const allUsers = allUsersSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+
+    const roomSnap = await db.collection("rooms").get();
+    const allRooms = roomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const availableRooms = allRooms.filter(room =>
+      room.status?.toLowerCase() === "available" &&
+      room.location?.toLowerCase().includes(currentUser.city?.toLowerCase() || "")
+    );
+
+    const result = await matchUserAndRooms(currentUser, allUsers, availableRooms);
+
+    res.json({ success: true, match: result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post('/confirm', async (req, res) => {
-    try {
-        const { matchData } = req.body;
-        await addMatchToFirestore(matchData);
-        res.json({ message: 'Match confirmed and stored successfully' });
-    } catch (error) {
-        console.error('Firestore Error:', error);
-        res.status(500).json({ error: 'Failed to store match data' });
-    }
+app.post("/confirm", async (req, res) => {
+  try {
+    const { currentUserUid, matchedRoomId, matchedRoommateUid } = req.body;
+    await db.collection("matches").doc(currentUserUid).set({
+      matchedRoomId,
+      matchedRoommateUid,
+      timestamp: new Date()
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
