@@ -4,7 +4,12 @@ import { db } from "./utils/firestore.js";
 import { matchUserAndRooms } from "./matcher.js";
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "*", // Allow all origins — for dev only
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 app.use(express.json());
 
 app.post("/match", async (req, res) => {
