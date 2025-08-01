@@ -9,42 +9,52 @@ app.use(express.json());
 
 app.post("/match", async (req, res) => {
   try {
-    const { currentUser } = req.body;
+    const { uid } = req.body;
 
-    const allUsersSnap = await db.collection("users").get();
-    const allUsers = allUsersSnap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+    if (!uid) {
+      return res.status(400).json({ error: "Missing UID in request body" });
+    }
 
-    const roomSnap = await db.collection("rooms").get();
-    const allRooms = roomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const availableRooms = allRooms.filter(room =>
-      room.status?.toLowerCase() === "available" &&
-      room.location?.toLowerCase().includes(currentUser.city?.toLowerCase() || "")
-    );
+    // ✅ Fetch current user
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const currentUser = { uid: userDoc.id, ...userDoc.data() };
 
-    const result = await matchUserAndRooms(currentUser, allUsers, availableRooms);
+    // ✅ Fetch all other users
+    const usersSnap = await db.collection("users").get();
+    const allUsers = usersSnap.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data()
+    }));
 
-    res.json({ success: true, match: result });
+    // ✅ Fetch available rooms in same city
+    const roomsSnap = await db.collection("availableRooms")
+      .where("city", "==", currentUser.city)
+      .get();
+
+    const availableRooms = roomsSnap.docs.map(doc => ({
+      roomId: doc.id,
+      ...doc.data()
+    }));
+
+    // ✅ AI Matching
+    const match = await matchUserAndRooms(currentUser, allUsers, availableRooms);
+
+    // ✅ Save to Firestore under matches/{uid}
+    await db.collection("matches").doc(uid).set(match);
+
+    // ✅ Return result
+    return res.json({ success: true, match });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post("/confirm", async (req, res) => {
-  try {
-    const { currentUserUid, matchedRoomId, matchedRoommateUid } = req.body;
-    await db.collection("matches").doc(currentUserUid).set({
-      matchedRoomId,
-      matchedRoommateUid,
-      timestamp: new Date()
-    });
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error("Match Error:", err.message);
+    return res.status(500).json({ error: err.message || "Server error" });
   }
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log(`✅ Server running on port ${PORT}`);
 });
