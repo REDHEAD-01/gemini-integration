@@ -29,11 +29,12 @@ export async function matchUserAndRooms(currentUserRaw, allUsersRaw, availableRo
     }));
 
   const availableRooms = availableRoomsRaw.map(room => ({
-    roomId: room.roomId,
-    type: room.type,
-    price: room.price,
-    city: room.city
-  }));
+  roomId: room.id || room.roomId,
+  type: room.type,
+  price: room.price,
+  city: room.location || room.city
+}));
+
 
   const prompt = `You are a roommate matchmaker. Match the current user to:
 - One best roommate from the list of users.
