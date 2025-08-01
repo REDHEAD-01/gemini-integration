@@ -12,23 +12,20 @@ app.post("/match", async (req, res) => {
     const { currentUser, allUsers, availableRooms } = req.body;
 
     if (!currentUser || !currentUser.uid) {
-      return res.status(400).json({ error: "Missing currentUser in request body" });
+      return res.status(400).json({ error: "Missing currentUser.uid" });
     }
 
-    // ✅ Perform matching using Gemini logic
     const match = await matchUserAndRooms(currentUser, allUsers, availableRooms);
 
-    // ✅ Save match to Firestore
     await db.collection("matches").doc(currentUser.uid).set(match);
 
-    // ✅ Return the match
     return res.json({ success: true, ...match });
-
   } catch (err) {
-    console.error("Match Error:", err.message);
+    console.error("Match Error:", err);
     return res.status(500).json({ error: err.message || "Server error" });
   }
 });
+
 
 
 const PORT = process.env.PORT || 10000;
